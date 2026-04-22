@@ -1,0 +1,38 @@
+# Optional NGINX Ingress — use this instead of a LoadBalancer Service if you
+# already have an ingress controller installed on your AKS cluster.
+#
+# Prerequisites:
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+#
+# Then set k8s/api/service.yaml type: ClusterIP and apply this file.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: azure-roadmap-agent
+  labels:
+    app.kubernetes.io/name: azure-roadmap-agent
+    app.kubernetes.io/component: api
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Uncomment to enable cert-manager TLS (requires cert-manager to be installed):
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  # Uncomment and set your hostname + TLS secret when using cert-manager:
+  # tls:
+  #   - hosts:
+  #       - azure-roadmap-agent.yourdomain.com
+  #     secretName: azure-roadmap-agent-tls
+  rules:
+    - host: azure-roadmap-agent.yourdomain.com   # Replace with your actual hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80

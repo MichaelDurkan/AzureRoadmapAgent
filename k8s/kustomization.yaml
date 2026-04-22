@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - api/deployment.yaml
+  - api/service.yaml
+  - api/hpa.yaml
+  - scheduler/cronjob.yaml
+
+# GitHub Actions uses `kustomize edit set image` to replace these tags
+# with the exact git-SHA digest before every deployment.
+images:
+  - name: ghcr.io/GITHUB_USERNAME/azure-roadmap-agent-api
+    newTag: latest
+  - name: ghcr.io/GITHUB_USERNAME/azure-roadmap-agent-scheduler
+    newTag: latest

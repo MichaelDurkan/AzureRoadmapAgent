@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "00000000-0000-0000-0000-000000000001",
+  "developer": {
+    "name": "Your Organisation",
+    "websiteUrl": "https://github.com/GITHUB_USERNAME/azure-roadmap-agent",
+    "privacyUrl": "https://github.com/GITHUB_USERNAME/azure-roadmap-agent",
+    "termsOfUseUrl": "https://github.com/GITHUB_USERNAME/azure-roadmap-agent"
+  },
+  "name": {
+    "short": "Azure Roadmap",
+    "full": "Azure Roadmap Weekly Digest Agent"
+  },
+  "description": {
+    "short": "Stay up to date with Azure product updates, previews, and retirements.",
+    "full": "The Azure Roadmap Agent monitors the official Azure Updates feed and delivers a weekly digest of new features (GA, Public Preview, Private Preview), upcoming retirements, and SKU & pricing changes across all Azure products. Ask it anything about what's new in Azure."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0078d4",
+  "copilotExtensions": {
+    "declarativeAgents": [
+      {
+        "id": "AzureRoadmapAgent",
+        "file": "declarativeAgent.json"
+      }
+    ]
+  },
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "YOUR_AKS_LOADBALANCER_IP_OR_HOSTNAME"
+  ]
+}

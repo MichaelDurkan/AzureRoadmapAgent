@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: Azure Roadmap Agent API
+  description: >
+    Provides real-time Azure product roadmap data including new features in
+    Generally Available, Public Preview, Private Preview, upcoming retirements,
+    and SKU / pricing changes. Data is sourced from the official Azure Updates
+    RSS feed and refreshed on every request.
+  version: "1.0.0"
+  contact:
+    name: Azure Roadmap Agent
+
+# ── IMPORTANT ─────────────────────────────────────────────────────────────────
+# Replace the server URL below with your AKS LoadBalancer IP or hostname.
+# You can find it after deployment by running:
+#   kubectl get service api -n azure-roadmap-agent
+# ─────────────────────────────────────────────────────────────────────────────
+servers:
+  - url: http://YOUR_AKS_LOADBALANCER_IP_OR_HOSTNAME
+    description: AKS production endpoint
+
+paths:
+  /api/digest:
+    get:
+      operationId: getWeeklyDigest
+      summary: Get the Azure roadmap weekly digest
+      description: >
+        Returns all Azure updates published in the last N days, grouped into
+        categories: Generally Available, Public Preview, Private Preview,
+        Retirements & End of Support, and SKU & Pricing Changes.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Number of days to look back (1–90, default 7)
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 90
+      responses:
+        "200":
+          description: Categorised Azure updates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigestResponse"
+
+  /api/updates:
+    get:
+      operationId: getUpdatesByCategory
+      summary: Get Azure updates filtered by a specific category
+      description: >
+        Returns updates filtered to a single category. Use 'all' to get
+        everything without grouping.
+      parameters:
+        - name: category
+          in: query
+          required: true
+          description: Category to filter by
+          schema:
+            type: string
+            enum:
+              - ga
+              - public_preview
+              - private_preview
+              - retirements
+              - sku_changes
+              - all
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 90
+      responses:
+        "200":
+          description: Filtered Azure updates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryResponse"
+
+  /api/summary:
+    get:
+      operationId: getDigestSummary
+      summary: Get a plain-text Markdown summary of this week's Azure updates
+      description: >
+        Returns a concise Markdown-formatted digest that Copilot can read aloud
+        or render inline. Ideal for chat-style responses.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 7
+      responses:
+        "200":
+          description: Markdown summary string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: string
+                    description: Markdown-formatted digest text
+
+  /api/send-digest:
+    post:
+      operationId: sendDigestEmail
+      summary: Send the weekly digest email immediately
+      description: >
+        Triggers an immediate email send of the digest to the configured
+        recipient. Optionally override the recipient and lookback window.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recipient:
+                  type: string
+                  format: email
+                  description: >
+                    Override the default RECIPIENT_EMAIL. If omitted,
+                    the server uses its configured default.
+                days:
+                  type: integer
+                  default: 7
+                  description: Lookback window in days
+      responses:
+        "200":
+          description: Email queued for delivery
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: queued
+                  recipient:
+                    type: string
+                  days:
+                    type: integer
+        "400":
+          description: No recipient configured
+
+components:
+  schemas:
+    UpdateItem:
+      type: object
+      properties:
+        title:
+          type: string
+        link:
+          type: string
+          format: uri
+        published_iso:
+          type: string
+          format: date-time
+        published_display:
+          type: string
+          example: "28 Mar 2026"
+        summary:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+
+    DigestResponse:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        generated_at:
+          type: string
+          format: date-time
+        total_updates:
+          type: integer
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+        categories:
+          type: object
+          properties:
+            ga:
+              type: array
+              items:
+                $ref: "#/components/schemas/UpdateItem"
+            public_preview:
+              type: array
+              items:
+                $ref: "#/components/schemas/UpdateItem"
+            private_preview:
+              type: array
+              items:
+                $ref: "#/components/schemas/UpdateItem"
+            retirements:
+              type: array
+              items:
+                $ref: "#/components/schemas/UpdateItem"
+            sku_changes:
+              type: array
+              items:
+                $ref: "#/components/schemas/UpdateItem"
+
+    CategoryResponse:
+      type: object
+      properties:
+        category:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdateItem"

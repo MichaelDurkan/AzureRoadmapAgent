@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: azure-roadmap-agent
+  labels:
+    app.kubernetes.io/name: azure-roadmap-agent
+data:
+  # ── Email settings ──────────────────────────────────────────────────────────
+  # SMTP server for outbound email.
+  # Office 365:  smtp.office365.com  port 587
+  # Gmail:       smtp.gmail.com      port 587  (requires App Password)
+  # SendGrid:    smtp.sendgrid.net   port 587  (user=apikey, password=SG.xxx)
+  SMTP_HOST: "smtp.office365.com"
+  SMTP_PORT: "587"
+
+  # ── Digest settings ─────────────────────────────────────────────────────────
+  # How many days of history the scheduled email covers
+  LOOKBACK_DAYS: "7"
+
+  # Cron schedule for the weekly email (default: every Monday at 08:00 UTC)
+  # Format: "minute hour day-of-month month day-of-week"
+  CRON_SCHEDULE: "0 8 * * 1"
+
+  # ── API settings ────────────────────────────────────────────────────────────
+  LOG_LEVEL: "INFO"

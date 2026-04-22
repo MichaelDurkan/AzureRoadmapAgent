@@ -1,0 +1,92 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-digest
+  namespace: azure-roadmap-agent
+  labels:
+    app.kubernetes.io/name: azure-roadmap-agent
+    app.kubernetes.io/component: scheduler
+spec:
+  # Every Monday at 08:00 UTC — override via ConfigMap CRON_SCHEDULE if needed.
+  # Kustomize patches this from the ConfigMap value during deployment.
+  schedule: "0 8 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: azure-roadmap-agent-scheduler
+            app.kubernetes.io/name: azure-roadmap-agent
+            app.kubernetes.io/component: scheduler
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+            - name: scheduler
+              # Image tag is overwritten by kustomize during GitHub Actions deploy
+              image: ghcr.io/GITHUB_USERNAME/azure-roadmap-agent-scheduler:latest
+              imagePullPolicy: Always
+              env:
+                - name: SMTP_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: agent-config
+                      key: SMTP_HOST
+                - name: SMTP_PORT
+                  valueFrom:
+                    configMapKeyRef:
+                      name: agent-config
+                      key: SMTP_PORT
+                - name: LOOKBACK_DAYS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: agent-config
+                      key: LOOKBACK_DAYS
+                - name: LOG_LEVEL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: agent-config
+                      key: LOG_LEVEL
+                - name: SMTP_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: agent-secrets
+                      key: SMTP_USER
+                - name: SMTP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: agent-secrets
+                      key: SMTP_PASSWORD
+                - name: SMTP_FROM
+                  valueFrom:
+                    secretKeyRef:
+                      name: agent-secrets
+                      key: SMTP_FROM
+                - name: RECIPIENT_EMAIL
+                  valueFrom:
+                    secretKeyRef:
+                      name: agent-secrets
+                      key: RECIPIENT_EMAIL
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL

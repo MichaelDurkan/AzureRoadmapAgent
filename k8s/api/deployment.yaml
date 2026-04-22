@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: azure-roadmap-agent
+  labels:
+    app.kubernetes.io/name: azure-roadmap-agent
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: azure-roadmap-agent-api
+  template:
+    metadata:
+      labels:
+        app: azure-roadmap-agent-api
+        app.kubernetes.io/name: azure-roadmap-agent
+        app.kubernetes.io/component: api
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          # Image tag is overwritten by kustomize during GitHub Actions deploy
+          image: ghcr.io/GITHUB_USERNAME/azure-roadmap-agent-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # Non-sensitive config from ConfigMap
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: SMTP_PORT
+            - name: LOOKBACK_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: LOOKBACK_DAYS
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: LOG_LEVEL
+            # Sensitive config from Secret
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: SMTP_PASSWORD
+            - name: SMTP_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: SMTP_FROM
+            - name: RECIPIENT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: RECIPIENT_EMAIL
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      restartPolicy: Always
