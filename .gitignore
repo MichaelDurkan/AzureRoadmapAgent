@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Secrets — NEVER commit these
+k8s/secret.yaml
+*.secret.yaml
+.env.*
+secrets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Kustomize build output
+k8s/kustomize-output/
+
+# Copilot Agent icons (add your own 192×192 and 32×32 PNGs)
+copilot-agent/color.png
+copilot-agent/outline.png
