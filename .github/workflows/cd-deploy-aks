@@ -1,0 +1,124 @@
+name: CD — Deploy to AKS
+
+on:
+  # Auto-deploy after CI succeeds on main
+  workflow_run:
+    workflows: ["CI — Build & Push Docker Images"]
+    types: [completed]
+    branches: [main]
+  # Allow manual deploys with an optional image tag override
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: sha-<commit>)"
+        required: false
+        default: ""
+
+# Only one deploy runs at a time; new runs cancel any pending one.
+concurrency:
+  group: deploy-aks
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    # Skip if triggered by a failed CI run
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      id-token: write   # required for OIDC login to Azure
+
+    environment:
+      name: production
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Determine image tag ───────────────────────────────────────────────
+      - name: Set image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            # Use the sha of the commit that triggered the CI run
+            SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+            TAG="sha-${SHA:0:7}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Deploying image tag: ${TAG}"
+
+      # ── 3. Log in to Azure (OIDC — no long-lived secrets) ───────────────────
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── 4. Set AKS kubectl context ───────────────────────────────────────────
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      # ── 5. Ensure namespace exists ───────────────────────────────────────────
+      - name: Apply namespace
+        run: kubectl apply -f k8s/namespace.yaml
+
+      # ── 6. Create / update Kubernetes Secret from repo secrets ──────────────
+      - name: Upsert agent-secrets
+        run: |
+          kubectl create secret generic agent-secrets \
+            --from-literal=SMTP_USER="${{ secrets.SMTP_USER }}" \
+            --from-literal=SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}" \
+            --from-literal=SMTP_FROM="${{ secrets.SMTP_FROM }}" \
+            --from-literal=RECIPIENT_EMAIL="${{ secrets.RECIPIENT_EMAIL }}" \
+            --namespace azure-roadmap-agent \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # ── 7. Update image tags in kustomization ───────────────────────────────
+      - name: Update image tags
+        working-directory: k8s
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          kustomize edit set image \
+            "ghcr.io/${OWNER}/azure-roadmap-agent-api=ghcr.io/${OWNER}/azure-roadmap-agent-api:${TAG}" \
+            "ghcr.io/${OWNER}/azure-roadmap-agent-scheduler=ghcr.io/${OWNER}/azure-roadmap-agent-scheduler:${TAG}"
+
+      # ── 8. Apply all manifests via kustomize ─────────────────────────────────
+      - name: Deploy
+        run: |
+          kubectl apply -k k8s/ --namespace azure-roadmap-agent
+
+      # ── 9. Wait for rollout ──────────────────────────────────────────────────
+      - name: Wait for API rollout
+        run: |
+          kubectl rollout status deployment/api \
+            --namespace azure-roadmap-agent \
+            --timeout=180s
+
+      # ── 10. Print service endpoint ───────────────────────────────────────────
+      - name: Print API endpoint
+        run: |
+          echo "Waiting for LoadBalancer IP..."
+          for i in $(seq 1 12); do
+            IP=$(kubectl get service api \
+              --namespace azure-roadmap-agent \
+              --output jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+            if [ -n "$IP" ]; then
+              echo ""
+              echo "✅ API is live at: http://${IP}/docs"
+              echo "   Update copilot-agent/openapi.yaml server URL to: http://${IP}"
+              break
+            fi
+            echo "  ...waiting ($i/12)"
+            sleep 10
+          done
